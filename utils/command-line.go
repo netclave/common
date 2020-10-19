@@ -16,14 +16,16 @@
 
 package utils
 
-import (
-	"github.com/google/uuid"
-)
+import "os/exec"
 
-func GenerateUUID() (string, error) {
-	uuidOut, err := uuid.NewRandom()
+var BinSh = "/bin/sh"
+var C = "-c"
+
+func RunCommandGetOutput(command string) (string, error) {
+	b, err := exec.Command(BinSh, C, command).Output()
 	if err != nil {
 		return "", err
 	}
-	return uuidOut.String(), nil
+
+	return string(b), nil
 }

@@ -77,7 +77,7 @@ func (rs *RedisStorage) GetKeys(table string, pattern string) ([]string, error) 
 }
 
 func (rs *RedisStorage) SetKey(table string, key string, value string, expiration time.Duration) error {
-	err := rs.client.Set(rs.ctx, table+"/"+key, value, expiration).Err()
+	err := rs.client.Set(table+"/"+key, value, expiration).Err()
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (rs *RedisStorage) SetKey(table string, key string, value string, expiratio
 }
 
 func (rs *RedisStorage) GetFullKey(key string) (string, error) {
-	val, err := rs.client.Get(rs.ctx, key).Result()
+	val, err := rs.client.Get(key).Result()
 
 	if err != nil {
 		if err.Error() == redis.Nil.Error() {
@@ -99,7 +99,7 @@ func (rs *RedisStorage) GetFullKey(key string) (string, error) {
 }
 
 func (rs *RedisStorage) GetKey(table string, key string) (string, error) {
-	val, err := rs.client.Get(rs.ctx, table+"/"+key).Result()
+	val, err := rs.client.Get(table + "/" + key).Result()
 
 	if err != nil {
 		if err.Error() == redis.Nil.Error() {
@@ -112,7 +112,7 @@ func (rs *RedisStorage) GetKey(table string, key string) (string, error) {
 }
 
 func (rs *RedisStorage) DelKey(table string, key string) (int64, error) {
-	deleted, err := rs.client.Del(rs.ctx, table+"/"+key).Result()
+	deleted, err := rs.client.Del(table + "/" + key).Result()
 
 	if err != nil {
 		return -1, err
@@ -121,7 +121,7 @@ func (rs *RedisStorage) DelKey(table string, key string) (int64, error) {
 }
 
 func (rs *RedisStorage) AddToMap(table string, key string, objectKey string, object string) error {
-	_, err := rs.client.HSet(rs.ctx, table+"/"+key, objectKey, object).Result()
+	_, err := rs.client.HSet(table+"/"+key, objectKey, object).Result()
 
 	if err != nil {
 		log.Println("Can not set map")
@@ -132,13 +132,13 @@ func (rs *RedisStorage) AddToMap(table string, key string, objectKey string, obj
 }
 
 func (rs *RedisStorage) DelFromMap(table string, key string, objectKey string) error {
-	_, err := rs.client.HDel(rs.ctx, table+"/"+key, objectKey).Result()
+	_, err := rs.client.HDel(table+"/"+key, objectKey).Result()
 
 	return err
 }
 
 func (rs *RedisStorage) GetFromMap(table string, key string, objectKey string) (string, error) {
-	cmdResult, err := rs.client.HGet(rs.ctx, table+"/"+key, objectKey).Result()
+	cmdResult, err := rs.client.HGet(table+"/"+key, objectKey).Result()
 
 	if err != nil {
 		return "", err
@@ -149,7 +149,7 @@ func (rs *RedisStorage) GetFromMap(table string, key string, objectKey string) (
 	return value, nil
 }
 func (rs *RedisStorage) GetMap(table string, key string) (map[string]string, error) {
-	cmdResult, err := rs.client.HGetAll(rs.ctx, table+"/"+key).Result()
+	cmdResult, err := rs.client.HGetAll(table + "/" + key).Result()
 
 	if err != nil {
 		return nil, err
