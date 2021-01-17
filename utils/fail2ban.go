@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/netclave/common/networkutils"
 	"github.com/netclave/common/storage"
@@ -131,7 +130,7 @@ func RetrieveIPs(dataStorage *storage.GenericStorage) ([]string, error) {
 
 	var resultArr []string
 	for ip, _ := range result {
-		resultArr = append(resultArr, ip);
+		resultArr = append(resultArr, ip)
 	}
 
 	return resultArr, nil
