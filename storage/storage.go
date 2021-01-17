@@ -27,7 +27,12 @@ import (
 
 var REDIS_STORAGE = "redis"
 var SQLITE_STORAGE = "sqlite"
+var POSTGRE_SQL_STORAGE = "postgresql"
+var MY_SQL_STORAGE = "mysql"
 var LastTruncate = int64(0)
+
+const NumberOfColumns = 10
+const TruncateInterval = 60 * 1000
 
 type Storage interface {
 	Setup(credentials map[string]string) error
@@ -122,6 +127,23 @@ func CreateStorage(credentials map[string]string, storageType string, setup bool
 		err := storage.Create(credentials)
 
 		return storage, err
+	case POSTGRE_SQL_STORAGE:
+		storage := &PostgreSQLStorage{}
+		if setup == true {
+			storage.Setup(credentials)
+		}
+		err := storage.Create(credentials)
+
+		return storage, err
+	case MY_SQL_STORAGE:
+		storage := &MySQLStorage{}
+		if setup == true {
+			storage.Setup(credentials)
+		}
+		err := storage.Create(credentials)
+
+		return storage, err
+
 	default:
 		return nil, errors.New("No such storage type")
 	}

@@ -26,6 +26,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/netclave/common/utils"
+
 	"github.com/netclave/common/cryptoutils"
 )
 
@@ -296,8 +298,22 @@ func (e *Response) InputValidation() error {
 	return nil
 }
 
-func EncodeResponse(code string, status string, data interface{}, w http.ResponseWriter) error {
+func EncodeResponse(code string, status string, data interface{}, w http.ResponseWriter, fail2banData *utils.Fail2BanData) error {
 	if code != "200" {
+		event, err := utils.CreateSimpleEvent(fail2banData.RemoteAddress)
+
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
+
+		err = utils.StoreBannedIP(fail2banData.DataStorage, event, fail2banData.TTL)
+
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
+
 		log.Printf("encode response code: %s, status: %s, data: %+v", code, status, data)
 	}
 

@@ -22,52 +22,44 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"os"
 	"strconv"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
+	_ "github.com/lib/pq"
 )
 
-type SQLiteStorage struct {
+type PostgreSQLStorage struct {
 	Connection *sql.DB
 }
 
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
-}
-
-func (ss *SQLiteStorage) Setup(credentials map[string]string) error {
-	fileName := credentials["filename"]
-
-	if !fileExists(fileName) {
-		file, err := os.Create(fileName) // Create SQLite file
-		if err != nil {
-			return err
-		}
-		file.Close()
-	}
-
+func (pss *PostgreSQLStorage) Setup(credentials map[string]string) error {
 	return nil
 }
 
-func (ss *SQLiteStorage) Init() error {
+func (pss *PostgreSQLStorage) executeSingleQuery(query string) error {
+	statement, err := pss.Connection.Prepare(query) // Prepare SQL Statement
+	if err != nil {
+		return err
+	}
+
+	_, err = statement.Exec() // Execute SQL Statements
+
+	return err
+}
+
+func (pss *PostgreSQLStorage) Init() error {
 	keysTableSQL := `CREATE TABLE IF NOT EXISTS keys (
-		"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,		
-		"table" TEXT,
-		"table_hash" INTEGER,
-		"key" TEXT,
-		`
+		 "id" BIGSERIAL NOT NULL PRIMARY KEY,		
+		 "table" TEXT,
+		 "table_hash" BIGINT,
+		 "key" TEXT,
+		 `
 
 	keysUniqueIndexValues := ""
 
 	for i := 1; i <= NumberOfColumns; i++ {
-		keysTableSQL += `"column_` + strconv.Itoa(i) + `_hash" INTEGER,
-		`
+		keysTableSQL += `"column_` + strconv.Itoa(i) + `_hash" BIGINT,
+		 `
 
 		keysUniqueIndexValues = keysUniqueIndexValues + "column_" + strconv.Itoa(i) + "_hash"
 
@@ -79,50 +71,55 @@ func (ss *SQLiteStorage) Init() error {
 	keysUniqueIndexValues += ", table_hash"
 
 	keysTableSQL += `"value" TEXT,
-		"ttl" INTEGER,		
-	   CONSTRAINT columns_unique_key UNIQUE(` + keysUniqueIndexValues + `));
-	  ` // SQL Statement for Create Table
+		 "ttl" BIGINT,		
+		CONSTRAINT columns_unique_key UNIQUE(` + keysUniqueIndexValues + `));`
 
-	keysTableSQL = keysTableSQL + `CREATE INDEX IF NOT EXISTS table_hash_index ON keys(table_hash);
-	`
+	log.Println(keysTableSQL)
 
-	for i := 1; i <= NumberOfColumns; i++ {
-		keysTableSQL = keysTableSQL + `CREATE INDEX IF NOT EXISTS column_` + strconv.Itoa(i) + `_hash_index ON keys(column_` + strconv.Itoa(i) + `_hash);
-		`
-	}
+	err := pss.executeSingleQuery(keysTableSQL)
 
-	keysTableSQL = keysTableSQL + `CREATE INDEX IF NOT EXISTS ttl_index ON keys(ttl);
-	`
-
-	//keysTableSQL = keysTableSQL + `CREATE UNIQUE INDEX IF NOT EXISTS update_index ON keys(` + keysUniqueIndexValues + `);
-	//`
-
-	//log.Println(keysTableSQL)
-
-	//log.Println("Create keys table...")
-	statement, err := ss.Connection.Prepare(keysTableSQL) // Prepare SQL Statement
 	if err != nil {
 		return err
 	}
 
-	_, err = statement.Exec()
+	keysTableSQL = `CREATE INDEX IF NOT EXISTS table_hash_index ON keys(table_hash);`
+
+	err = pss.executeSingleQuery(keysTableSQL)
+
+	if err != nil {
+		return err
+	}
+
+	for i := 1; i <= NumberOfColumns; i++ {
+		keysTableSQL = `CREATE INDEX IF NOT EXISTS column_` + strconv.Itoa(i) + `_hash_index ON keys(column_` + strconv.Itoa(i) + `_hash);`
+
+		err = pss.executeSingleQuery(keysTableSQL)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	keysTableSQL = `CREATE INDEX IF NOT EXISTS ttl_index ON keys(ttl);`
+
+	err = pss.executeSingleQuery(keysTableSQL)
 
 	if err != nil {
 		return err
 	}
 
 	mapsTableSQL := `CREATE TABLE IF NOT EXISTS maps (
-		"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,		
-		"table" TEXT,
-		"table_hash" INTEGER,
-		"key" TEXT,
-		`
+		 "id" BIGSERIAL NOT NULL PRIMARY KEY,		
+		 "table" TEXT,
+		 "table_hash" BIGINT,
+		 "key" TEXT,
+		 `
 
 	mapKeysUniqueIndexValues := ""
 
 	for i := 1; i <= NumberOfColumns; i++ {
-		mapsTableSQL += `"column_` + strconv.Itoa(i) + `_hash" INTEGER,
-		`
+		mapsTableSQL += `"column_` + strconv.Itoa(i) + `_hash" BIGINT,
+		 `
 
 		mapKeysUniqueIndexValues = mapKeysUniqueIndexValues + "column_" + strconv.Itoa(i) + "_hash"
 
@@ -135,34 +132,41 @@ func (ss *SQLiteStorage) Init() error {
 	mapKeysUniqueIndexValues += ", object_key_hash"
 
 	mapsTableSQL += `"value" TEXT,
-		"object_key" TEXT,		
-		"object_key_hash" INTEGER,		
-	   CONSTRAINT map_columns_unique_key UNIQUE(` + mapKeysUniqueIndexValues + `));
-	  ` // SQL Statement for Create Table
+		 "object_key" TEXT,		
+		 "object_key_hash" BIGINT,		
+		CONSTRAINT map_columns_unique_key UNIQUE(` + mapKeysUniqueIndexValues + `));`
 
-	mapsTableSQL = mapsTableSQL + `CREATE INDEX IF NOT EXISTS table_hash_index ON maps(table_hash);
-	`
+	log.Println(mapsTableSQL)
 
-	for i := 1; i <= NumberOfColumns; i++ {
-		mapsTableSQL = mapsTableSQL + `CREATE INDEX IF NOT EXISTS column_` + strconv.Itoa(i) + `_hash_index ON maps(column_` + strconv.Itoa(i) + `_hash);
-		`
-	}
+	err = pss.executeSingleQuery(mapsTableSQL)
 
-	mapsTableSQL = mapsTableSQL + `CREATE INDEX IF NOT EXISTS object_key_hash_index ON maps(object_key_hash);
-	`
-
-	//keysTableSQL = keysTableSQL + `CREATE UNIQUE INDEX IF NOT EXISTS update_index ON keys(` + keysUniqueIndexValues + `);
-	//`
-
-	//log.Println(mapsTableSQL)
-
-	//log.Println("Create keys table...")
-	statementMap, err := ss.Connection.Prepare(mapsTableSQL) // Prepare SQL Statement
 	if err != nil {
 		return err
 	}
 
-	_, err = statementMap.Exec()
+	mapsTableSQL = `CREATE INDEX IF NOT EXISTS table_hash_index ON maps(table_hash);`
+
+	err = pss.executeSingleQuery(mapsTableSQL)
+
+	if err != nil {
+		return err
+	}
+
+	for i := 1; i <= NumberOfColumns; i++ {
+		mapsTableSQL = `CREATE INDEX IF NOT EXISTS column_` + strconv.Itoa(i) + `_hash_index ON maps(column_` + strconv.Itoa(i) + `_hash);`
+
+		err = pss.executeSingleQuery(mapsTableSQL)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Println("Before creating an index for object key hash")
+
+	mapsTableSQL = `CREATE INDEX IF NOT EXISTS object_key_hash_index ON maps(object_key_hash);`
+
+	err = pss.executeSingleQuery(mapsTableSQL)
 
 	if err != nil {
 		return err
@@ -173,11 +177,19 @@ func (ss *SQLiteStorage) Init() error {
 	return nil
 }
 
-func (ss *SQLiteStorage) Create(credentials map[string]string) error {
+func (pss *PostgreSQLStorage) Create(credentials map[string]string) error {
 	var err error
 
-	ss.Connection, err = sql.Open("sqlite3", credentials["filename"]) // Open the created SQLite File
+	host := credentials["host"]
+	port := credentials["port"]
+	user := credentials["user"]
+	password := credentials["password"]
+	dbname := credentials["dbname"]
+	sslmode := credentials["sslmode"]
 
+	psqlconn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", host, port, user, password, dbname, sslmode)
+
+	pss.Connection, err = sql.Open("postgres", psqlconn)
 	if err != nil {
 		return err
 	}
@@ -185,12 +197,12 @@ func (ss *SQLiteStorage) Create(credentials map[string]string) error {
 	return nil
 }
 
-func (ss *SQLiteStorage) Destroy() error {
-	return ss.Connection.Close() // Defer Closing the database
+func (pss *PostgreSQLStorage) Destroy() error {
+	return pss.Connection.Close()
 }
 
-func (ss *SQLiteStorage) GetKeys(table string, pattern string) ([]string, error) {
-	err := ss.KeysCleanUp()
+func (pss *PostgreSQLStorage) GetKeys(table string, pattern string) ([]string, error) {
+	err := pss.KeysCleanUp()
 
 	if err != nil {
 		return nil, err
@@ -209,7 +221,7 @@ func (ss *SQLiteStorage) GetKeys(table string, pattern string) ([]string, error)
 
 	clause := CreateWhereClause(columns, hashes)
 
-	sql := "SELECT `table`, `key`, ttl FROM keys WHERE table_hash = " + fmt.Sprint(tableHash)
+	sql := "SELECT \"table\", \"key\", ttl FROM keys WHERE table_hash = " + fmt.Sprint(tableHash)
 
 	if clause != "" {
 		sql += " AND " + clause
@@ -217,14 +229,14 @@ func (ss *SQLiteStorage) GetKeys(table string, pattern string) ([]string, error)
 
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
-	row, err := ss.Connection.Query(sql)
+	row, err := pss.Connection.Query(sql)
 
 	if err != nil {
 		return nil, err
 	}
 
 	defer row.Close()
-	for row.Next() { // Iterate and fetch the records from result cursor
+	for row.Next() {
 		var table string
 		var key string
 		var ttl int64
@@ -235,7 +247,7 @@ func (ss *SQLiteStorage) GetKeys(table string, pattern string) ([]string, error)
 		}
 	}
 
-	sql = "SELECT `table`, `key` FROM maps WHERE table_hash = " + fmt.Sprint(tableHash)
+	sql = "SELECT \"table\", \"key\" FROM maps WHERE table_hash = " + fmt.Sprint(tableHash)
 
 	if clause != "" {
 		sql += " AND " + clause
@@ -243,7 +255,7 @@ func (ss *SQLiteStorage) GetKeys(table string, pattern string) ([]string, error)
 
 	now = time.Now().UnixNano() / int64(time.Millisecond)
 
-	row, err = ss.Connection.Query(sql)
+	row, err = pss.Connection.Query(sql)
 
 	if err != nil {
 		return nil, err
@@ -261,8 +273,8 @@ func (ss *SQLiteStorage) GetKeys(table string, pattern string) ([]string, error)
 	return keys, nil
 }
 
-func (ss *SQLiteStorage) SetKey(table string, key string, value string, expiration time.Duration) error {
-	err := ss.KeysCleanUp()
+func (pss *PostgreSQLStorage) SetKey(table string, key string, value string, expiration time.Duration) error {
+	err := pss.KeysCleanUp()
 
 	if err != nil {
 		return err
@@ -277,7 +289,7 @@ func (ss *SQLiteStorage) SetKey(table string, key string, value string, expirati
 	hashes := CalculateHashesOfColumns(columns)
 	tableHash := CalculateHash(table)
 
-	sql := "INSERT INTO keys (`table`, table_hash, key,"
+	sql := "INSERT INTO keys (\"table\", table_hash, key,"
 
 	keysUniqueIndexValues := ""
 
@@ -319,12 +331,12 @@ func (ss *SQLiteStorage) SetKey(table string, key string, value string, expirati
 
 	//log.Println(sql)
 
-	_, err = ss.Connection.Exec(sql)
+	_, err = pss.Connection.Exec(sql)
 
 	return err
 }
 
-func (ss *SQLiteStorage) GetFullKey(key string) (string, error) {
+func (pss *PostgreSQLStorage) GetFullKey(key string) (string, error) {
 	parts := SplitToParts(key)
 
 	table := parts[0]
@@ -341,11 +353,11 @@ func (ss *SQLiteStorage) GetFullKey(key string) (string, error) {
 		}
 	}
 
-	return ss.GetKey(table, newKey)
+	return pss.GetKey(table, newKey)
 }
 
-func (ss *SQLiteStorage) GetKey(table string, key string) (string, error) {
-	err := ss.KeysCleanUp()
+func (pss *PostgreSQLStorage) GetKey(table string, key string) (string, error) {
+	err := pss.KeysCleanUp()
 
 	if err != nil {
 		return "", err
@@ -362,7 +374,7 @@ func (ss *SQLiteStorage) GetKey(table string, key string) (string, error) {
 
 	clause := CreateWhereClause(columns, hashes)
 
-	sql := "SELECT `value`, `ttl` FROM keys WHERE table_hash = " + fmt.Sprint(tableHash)
+	sql := "SELECT \"value\", \"ttl\" FROM keys WHERE table_hash = " + fmt.Sprint(tableHash)
 
 	if clause != "" {
 		sql += " AND " + clause
@@ -370,7 +382,7 @@ func (ss *SQLiteStorage) GetKey(table string, key string) (string, error) {
 
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
-	row, err := ss.Connection.Query(sql)
+	row, err := pss.Connection.Query(sql)
 
 	if err != nil {
 		return "", err
@@ -390,7 +402,7 @@ func (ss *SQLiteStorage) GetKey(table string, key string) (string, error) {
 	return "", nil
 }
 
-func (ss *SQLiteStorage) KeysCleanUp() error {
+func (pss *PostgreSQLStorage) KeysCleanUp() error {
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
 	if (now - LastTruncate) > TruncateInterval {
@@ -400,7 +412,7 @@ func (ss *SQLiteStorage) KeysCleanUp() error {
 
 		sql := "DELETE FROM keys WHERE ttl < " + nowStr
 
-		result, err := ss.Connection.Exec(sql)
+		result, err := pss.Connection.Exec(sql)
 
 		if err != nil {
 			return err
@@ -420,8 +432,8 @@ func (ss *SQLiteStorage) KeysCleanUp() error {
 	return nil
 }
 
-func (ss *SQLiteStorage) DelKey(table string, key string) (int64, error) {
-	err := ss.KeysCleanUp()
+func (pss *PostgreSQLStorage) DelKey(table string, key string) (int64, error) {
+	err := pss.KeysCleanUp()
 
 	if err != nil {
 		return 0, err
@@ -444,7 +456,7 @@ func (ss *SQLiteStorage) DelKey(table string, key string) (int64, error) {
 		sql += " AND " + clause
 	}
 
-	res, err := ss.Connection.Exec(sql)
+	res, err := pss.Connection.Exec(sql)
 
 	if err != nil {
 		return -1, err
@@ -453,7 +465,7 @@ func (ss *SQLiteStorage) DelKey(table string, key string) (int64, error) {
 	return res.RowsAffected()
 }
 
-func (ss *SQLiteStorage) AddToMap(table string, key string, objectKey string, object string) error {
+func (pss *PostgreSQLStorage) AddToMap(table string, key string, objectKey string, object string) error {
 	columns := SplitToParts(key)
 
 	if len(columns) > NumberOfColumns {
@@ -464,7 +476,7 @@ func (ss *SQLiteStorage) AddToMap(table string, key string, objectKey string, ob
 	tableHash := CalculateHash(table)
 	objectKeyHash := CalculateHash(objectKey)
 
-	sql := "INSERT INTO maps (`table`, table_hash, key, object_key, object_key_hash,"
+	sql := "INSERT INTO maps (\"table\", table_hash, key, object_key, object_key_hash,"
 
 	keysUniqueIndexValues := ""
 
@@ -499,12 +511,12 @@ func (ss *SQLiteStorage) AddToMap(table string, key string, objectKey string, ob
 
 	//log.Println(sql)
 
-	_, err := ss.Connection.Exec(sql)
+	_, err := pss.Connection.Exec(sql)
 
 	return err
 }
 
-func (ss *SQLiteStorage) DelFromMap(table string, key string, objectKey string) error {
+func (pss *PostgreSQLStorage) DelFromMap(table string, key string, objectKey string) error {
 	columns := SplitToParts(key)
 
 	if len(columns) > NumberOfColumns {
@@ -523,7 +535,7 @@ func (ss *SQLiteStorage) DelFromMap(table string, key string, objectKey string) 
 		sql += " AND " + clause
 	}
 
-	_, err := ss.Connection.Exec(sql)
+	_, err := pss.Connection.Exec(sql)
 
 	if err != nil {
 		return err
@@ -532,7 +544,7 @@ func (ss *SQLiteStorage) DelFromMap(table string, key string, objectKey string) 
 	return nil
 }
 
-func (ss *SQLiteStorage) GetFromMap(table string, key string, objectKey string) (string, error) {
+func (pss *PostgreSQLStorage) GetFromMap(table string, key string, objectKey string) (string, error) {
 	columns := SplitToParts(key)
 
 	if len(columns) > NumberOfColumns {
@@ -545,13 +557,13 @@ func (ss *SQLiteStorage) GetFromMap(table string, key string, objectKey string) 
 
 	clause := CreateWhereClause(columns, hashes)
 
-	sql := "SELECT `value` FROM maps WHERE table_hash = " + fmt.Sprint(tableHash) + " AND object_key_hash = " + fmt.Sprint(objectKeyHash)
+	sql := "SELECT \"value\" FROM maps WHERE table_hash = " + fmt.Sprint(tableHash) + " AND object_key_hash = " + fmt.Sprint(objectKeyHash)
 
 	if clause != "" {
 		sql += " AND " + clause
 	}
 
-	row, err := ss.Connection.Query(sql)
+	row, err := pss.Connection.Query(sql)
 
 	if err != nil {
 		return "", err
@@ -567,7 +579,7 @@ func (ss *SQLiteStorage) GetFromMap(table string, key string, objectKey string) 
 
 	return "", nil
 }
-func (ss *SQLiteStorage) GetMap(table string, key string) (map[string]string, error) {
+func (pss *PostgreSQLStorage) GetMap(table string, key string) (map[string]string, error) {
 	result := map[string]string{}
 
 	columns := SplitToParts(key)
@@ -581,13 +593,13 @@ func (ss *SQLiteStorage) GetMap(table string, key string) (map[string]string, er
 
 	clause := CreateWhereClause(columns, hashes)
 
-	sql := "SELECT object_key, `value` FROM maps WHERE table_hash = " + fmt.Sprint(tableHash)
+	sql := "SELECT object_key, \"value\" FROM maps WHERE table_hash = " + fmt.Sprint(tableHash)
 
 	if clause != "" {
 		sql += " AND " + clause
 	}
 
-	row, err := ss.Connection.Query(sql)
+	row, err := pss.Connection.Query(sql)
 
 	if err != nil {
 		return nil, err

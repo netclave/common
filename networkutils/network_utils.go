@@ -16,8 +16,48 @@
 
 package networkutils
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func EnableCors(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+}
+
+func ParseIP(remoteAddress string) string {
+	ipPort := remoteAddress
+
+	//log.Printf(ipPort)
+
+	ipPortSplit := strings.Split(ipPort, ":")
+
+	ip := ""
+
+	for i := 0; i < len(ipPortSplit)-1; i++ {
+		ip = ip + ipPortSplit[i]
+
+		if i < len(ipPortSplit)-2 {
+			ip = ip + ":"
+		}
+	}
+
+	return ip
+}
+
+func GetRemoteAddress(req *http.Request) string {
+	ipAddress := req.RemoteAddr
+	fwdAddress := req.Header.Get("X-Forwarded-For") // capitalisation doesn't matter
+	if fwdAddress != "" {
+		// Got X-Forwarded-For
+		ipAddress = fwdAddress // If it's a single IP, then awesome!
+
+		// If we got an array... grab the first IP
+		ips := strings.Split(fwdAddress, ", ")
+		if len(ips) > 1 {
+			ipAddress = ips[0]
+		}
+	}
+
+	return ipAddress
 }

@@ -18,6 +18,8 @@ package utils
 
 import (
 	"github.com/google/uuid"
+	"strconv"
+	"time"
 )
 
 func GenerateUUID() (string, error) {
@@ -26,4 +28,9 @@ func GenerateUUID() (string, error) {
 		return "", err
 	}
 	return uuidOut.String(), nil
+}
+
+func GenerateTimestampUUID() (string, error) {
+	uuid, err := GenerateUUID()
+	return strconv.FormatInt(time.Now().Unix(), 10) + "/" + uuid, err
 }
